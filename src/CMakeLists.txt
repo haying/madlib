@@ -20,8 +20,8 @@ set(BITBUCKET_BASE_URL "https://bitbucket.org" CACHE STRING
 # running cmake:
 # "-DBOOST_TAR_SOURCE=/path/to/boost_x_x_x.tar.gz"
 
-set(BOOST_TAR_VERSION "1.46.1")
-set(BOOST_TAR_MD5 341e5d993b19d099bf1a548495ea91ec)
+set(BOOST_TAR_VERSION "1.49.0")
+set(BOOST_TAR_MD5 e0defc8c818e4f1c5bbb29d0292b76ca)
 
 string(REPLACE "." "_" _BOOST_TAR_VERSION_UNDERSCORES ${BOOST_TAR_VERSION})
 set(BOOST_TAR "boost_${_BOOST_TAR_VERSION_UNDERSCORES}.tar.gz")
@@ -98,7 +98,7 @@ set(MAD_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 
 # -- Third-party dependencies: Find or download Boost --------------------------
 
-find_package(Boost 1.46)
+find_package(Boost 1.47)
 
 # We use BOOST_ASSERT_MSG, which only exists in Boost 1.46 and later.
 # Unfortunately, the FindBoost module seems to be broken with respect to version
