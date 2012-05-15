@@ -6,8 +6,10 @@
  *
  *//* ----------------------------------------------------------------------- */
 
+#include "kmeans/kmeans.hpp"
 #include "linalg/linalg.hpp"
 #include "prob/prob.hpp"
+#include "random/random.hpp"
 #include "regress/regress.hpp"
 #include "sample/sample.hpp"
 #include "stats/stats.hpp"
