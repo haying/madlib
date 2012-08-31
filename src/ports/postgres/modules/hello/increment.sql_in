@@ -1,0 +1,13 @@
+/* ----------------------------------------------------------------------- *//** 
+ *
+ * @file hello.sql_in
+ *
+ *//* ----------------------------------------------------------------------- */
+
+m4_include(`SQLCommon.m4')
+
+CREATE FUNCTION MADLIB_SCHEMA.hello_increment(a INTEGER)
+RETURNS INTEGER
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE;
+
