@@ -32,3 +32,4 @@ modules:
     - name: utilities
       depends: ['linalg']
     - name: textfex_viterbi
+    - name: hello

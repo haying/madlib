@@ -1,0 +1,13 @@
+/* ----------------------------------------------------------------------- *//**
+ *
+ * @file hello.sql_in
+ *
+ *//* ----------------------------------------------------------------------- */
+
+m4_include(`SQLCommon.m4')
+
+CREATE FUNCTION MADLIB_SCHEMA.hello_array_len(a FLOAT8 [])
+RETURNS INTEGER
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE;
+
