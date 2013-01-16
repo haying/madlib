@@ -1,0 +1,77 @@
+CREATE TABLE ip_constraint (
+  a1  integer,
+  a2  integer,
+  a3  integer,
+  a4  integer,
+  b   integer
+);
+
+CREATE TABLE ip_coefficients (
+  c1  integer,
+  c2  integer,
+  c3  integer,
+  c4  integer
+);
+
+CREATE TABLE ip_variable (
+  d  integer,
+  x  integer
+);
+
+--------------------------------------------------------------------------
+-- Binary Integer Programming Example: Cal Aircraft Manufacturing Company
+-- Solution: (1, 1, 0, 0) -> obj = 14
+-- http://stuff.mit.edu/afs/athena/course/16/16.410/www/lectures_fall04/L18-19-IP-BB.pdf
+--------------------------------------------------------------------------
+COPY ip_coefficients FROM STDIN;
+9	5	6	4
+\.
+
+COPY ip_constraint FROM STDIN;
+6	3	5	2	10
+0	0	1	1	1
+-1	0	1	0	0
+0	-1	0	1	0
+\.
+
+COPY ip_variable FROM STDIN;
+0	0
+1	1
+\.
+
+WITH gb AS (
+    SELECT int_prog_agg(
+        ARRAY[t1.a1, t1.a2, t1.a3, t1.a4, t1.b,
+        t2.c1, t2.c2, t2.c3, t2.c4,
+        t3.x, t4.x, t5.x, t6.x]) AS obj,
+      t3.x AS x1, t4.x AS x2, t5.x AS x3, t6.x AS x4
+    FROM ip_constraint AS t1, ip_coefficients AS t2,
+      ip_variable AS t3, ip_variable AS t4,
+      ip_variable AS t5, ip_variable AS t6
+    GROUP BY x1, x2, x3, x4
+  ), optimum AS (
+    SELECT min(obj) AS value FROM gb
+  )
+SELECT x1, x2, x3, x4
+FROM gb, optimum
+WHERE gb.obj = optimum.value;
+
+WITH gb AS (
+    SELECT int_prog_agg(
+        ARRAY[t1.a1, t1.a2, t1.a3, t1.a4, t1.b,
+        t2.c1, t2.c2, t2.c3, t2.c4,
+        t3.x, t4.x, t5.x, t6.x]) AS obj,
+      t3.x AS x1, t4.x AS x2, t5.x AS x3, t6.x AS x4
+    FROM ip_constraint AS t1, ip_coefficients AS t2,
+      ip_variable AS t3, ip_variable AS t4,
+      ip_variable AS t5, ip_variable AS t6
+    GROUP BY x1, x2, x3, x4
+  ), optimum AS (
+    SELECT min(obj) AS value FROM gb
+  )
+SELECT assert(
+    -gb.obj = 14,
+    'Wrong result: obj should have been 14 for Cal Aircraft Manufacturing Company')
+FROM gb, optimum
+WHERE gb.obj = optimum.value;
+

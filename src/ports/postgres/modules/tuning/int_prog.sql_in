@@ -1,0 +1,82 @@
+/* ----------------------------------------------------------------------- *//**
+ *
+ * @file int_prog.sql_in
+ *
+ * @brief SQL functions for integer programming
+ * @date January 2013
+ *
+ *//* ----------------------------------------------------------------------- */
+
+
+m4_include(`SQLCommon.m4')
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_transition(
+    state  INTEGER,
+    tuple  INTEGER[])
+RETURNS INTEGER AS $$
+DECLARE
+  ax  INTEGER := 0;
+  cx  INTEGER := 0;
+  n   INTEGER;
+  xi  INTEGER;
+BEGIN
+  IF state IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  n := (array_upper(tuple, 1) - 1) / 3;
+
+  FOR i IN 1..n LOOP
+    xi = tuple[2 * n + 1 + i];
+    ax := ax + tuple[i] * xi;  -- a[i] * x[i]
+    cx := cx + tuple[n + 1 + i] * xi;  -- c[i] * x[i]
+  END LOOP;
+
+  IF ax <= tuple[n + 1]  -- ax <= b
+  THEN
+    RETURN cx;
+  ELSE
+    RETURN NULL;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_merge(
+    state1  INTEGER,
+    state2  INTEGER)
+RETURNS INTEGER AS $$
+BEGIN
+  IF state1 IS NULL OR state2 IS NULL THEN
+    RETURN NULL;
+  ELSE
+    RETURN state1;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_final(
+    state  INTEGER)
+RETURNS INTEGER AS $$
+BEGIN
+  IF state IS NULL THEN
+    RETURN NULL;
+  ELSE
+    RETURN -state;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE AGGREGATE MADLIB_SCHEMA.int_prog_agg(
+    /*+ a, b, c, x */  INTEGER[])
+(
+  STYPE=INTEGER,
+  INITCOND='0',
+  SFUNC=MADLIB_SCHEMA.int_prog_transition,
+  m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.int_prog_merge,')
+  FINALFUNC=MADLIB_SCHEMA.int_prog_final
+);
+
