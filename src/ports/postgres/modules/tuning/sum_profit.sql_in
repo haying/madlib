@@ -1,0 +1,48 @@
+/* ----------------------------------------------------------------------- *//**
+ *
+ * @file sum_profit.sql_in
+ *
+ * @brief SQL functions for sum of the profit of 2 numbers
+ * @date Feburary 2013
+ *
+ *//* ----------------------------------------------------------------------- */
+
+
+m4_include(`SQLCommon.m4')
+
+
+CREATE FUNCTION MADLIB_SCHEMA.sum_profit_transition(
+    state   DOUBLE PRECISION,
+    price   DOUBLE PRECISION,
+    discnt  DOUBLE PRECISION,
+    cost    DOUBLE PRECISION,
+    qty     DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION AS $$
+BEGIN
+  RETURN state + price * (1 - discnt) - cost * qty;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.sum_profit_merge(
+    state1  DOUBLE PRECISION,
+    state2  DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION AS $$
+BEGIN
+  RETURN state1 + state2;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE AGGREGATE MADLIB_SCHEMA.sum_profit_agg(
+    /*+ price  */  DOUBLE PRECISION,
+    /*+ discnt */  DOUBLE PRECISION,
+    /*+ cost   */  DOUBLE PRECISION,
+    /*+ qty    */  DOUBLE PRECISION)
+(
+  STYPE=DOUBLE PRECISION,
+  INITCOND='0',
+  m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.sum_profit_merge,')
+  SFUNC=MADLIB_SCHEMA.sum_profit_transition
+);
+

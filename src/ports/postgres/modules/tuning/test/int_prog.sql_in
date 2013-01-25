@@ -14,7 +14,6 @@ CREATE TABLE ip_coefficients (
 );
 
 CREATE TABLE ip_variable (
-  d  integer,
   x  integer
 );
 
@@ -35,8 +34,8 @@ COPY ip_constraint FROM STDIN;
 \.
 
 COPY ip_variable FROM STDIN;
-0	0
-1	1
+0
+1
 \.
 
 WITH gb AS (

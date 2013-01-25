@@ -1,0 +1,44 @@
+/* ----------------------------------------------------------------------- *//**
+ *
+ * @file sum_prod.sql_in
+ *
+ * @brief SQL functions for sum of the product of 2 numbers
+ * @date January 2013
+ *
+ *//* ----------------------------------------------------------------------- */
+
+
+m4_include(`SQLCommon.m4')
+
+
+CREATE FUNCTION MADLIB_SCHEMA.sum_prod_transition(
+    state  DOUBLE PRECISION,
+    a      DOUBLE PRECISION,
+    b      DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION AS $$
+BEGIN
+  RETURN state + a * b;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.sum_prod_merge(
+    state1  DOUBLE PRECISION,
+    state2  DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION AS $$
+BEGIN
+  RETURN state1 + state2;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE AGGREGATE MADLIB_SCHEMA.sum_prod_agg(
+    /*+ a */ DOUBLE PRECISION,
+    /*+ b */ DOUBLE PRECISION)
+(
+  STYPE=DOUBLE PRECISION,
+  INITCOND='0',
+  m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.sum_prod_merge,')
+  SFUNC=MADLIB_SCHEMA.sum_prod_transition
+);
+
