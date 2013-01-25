@@ -1,0 +1,111 @@
+/* ----------------------------------------------------------------------- *//**
+ *
+ * @file int_prog_6.sql_in
+ *
+ * @brief SQL functions for integer programming w/ 4 variables
+ * @date January 2013
+ *
+ *//* ----------------------------------------------------------------------- */
+
+
+m4_include(`SQLCommon.m4')
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_6_transition(
+    state  INTEGER,
+    a1     INTEGER,
+    a2     INTEGER,
+    a3     INTEGER,
+    a4     INTEGER,
+    a5     INTEGER,
+    a6     INTEGER,
+    b      INTEGER,
+    c1     INTEGER,
+    c2     INTEGER,
+    c3     INTEGER,
+    c4     INTEGER,
+    c5     INTEGER,
+    c6     INTEGER,
+    x1     INTEGER,
+    x2     INTEGER,
+    x3     INTEGER,
+    x4     INTEGER,
+    x5     INTEGER,
+    x6     INTEGER)
+RETURNS INTEGER AS $$
+DECLARE
+  ax  INTEGER := 0;
+  cx  INTEGER := 0;
+BEGIN
+  IF state IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  ax = a1*x1 + a2*x2 + a3*x3 + a4*x4 + a5*x5 + a6*x6;
+  cx = c1*x1 + c2*x2 + c3*x3 + c4*x4 + c5*x5 + c6*x6;
+
+  IF ax <= b
+  THEN
+    RETURN cx;
+  ELSE
+    RETURN NULL;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_6_merge(
+    state1  INTEGER,
+    state2  INTEGER)
+RETURNS INTEGER AS $$
+BEGIN
+  IF state1 IS NULL OR state2 IS NULL THEN
+    RETURN NULL;
+  ELSE
+    RETURN state1;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE FUNCTION MADLIB_SCHEMA.int_prog_6_final(
+    state  INTEGER)
+RETURNS INTEGER AS $$
+BEGIN
+  IF state IS NULL THEN
+    RETURN NULL;
+  ELSE
+    RETURN -state;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+CREATE AGGREGATE MADLIB_SCHEMA.int_prog_6_agg(
+    /*+ a1 */  INTEGER,
+    /*+ a2 */  INTEGER,
+    /*+ a3 */  INTEGER,
+    /*+ a4 */  INTEGER,
+    /*+ a5 */  INTEGER,
+    /*+ a6 */  INTEGER,
+    /*+ b */   INTEGER,
+    /*+ c1 */  INTEGER,
+    /*+ c2 */  INTEGER,
+    /*+ c3 */  INTEGER,
+    /*+ c4 */  INTEGER,
+    /*+ c5 */  INTEGER,
+    /*+ c6 */  INTEGER,
+    /*+ x1 */  INTEGER,
+    /*+ x2 */  INTEGER,
+    /*+ x3 */  INTEGER,
+    /*+ x4 */  INTEGER,
+    /*+ x5 */  INTEGER,
+    /*+ x6 */  INTEGER)
+(
+  STYPE=INTEGER,
+  INITCOND='0',
+  SFUNC=MADLIB_SCHEMA.int_prog_6_transition,
+  m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.int_prog_6_merge,')
+  FINALFUNC=MADLIB_SCHEMA.int_prog_6_final
+);
+
