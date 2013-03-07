@@ -1,4 +1,4 @@
-/* ----------------------------------------------------------------------- *//** 
+/* ----------------------------------------------------------------------- *//**
  *
  * @file linear_svm.sql_in
  *
@@ -66,19 +66,19 @@ CREATE TABLE linear_svm_data (
     features    DOUBLE PRECISION[],
     label       BOOLEAN
 );
-\endcode     
+\endcode
 -# Populate the input table with some data, which should be well-conditioned, e.g.:
 \code
 mydb=# INSERT INTO linear_svm_data values ({1, 1}, t);
 mydb=# INSERT INTO linear_svm_data values ({0.67, -0.06}, f);
 ...
 mydb=# INSERT INTO linear_svm_data values ({0.15, -1.3}, f);
-\endcode   
--# Call linear_svm_igd_run() to learn coefficients, e.g.:  
+\endcode
+-# Call linear_svm_igd_run() to learn coefficients, e.g.:
 \code
 mydb=# SELECT madlib.linear_svm_igd_run('linear_svm_model', 'linear_svm_data', 'features', 'label', 2, 0.01, 10, 1e-6);
 \endcode
--# Call linear_svm_igd_predict() to predict results. You usually need the model id output from the learning query to locate the model, assuming 1, e.g.:  
+-# Call linear_svm_igd_predict() to predict results. You usually need the model id output from the learning query to locate the model, assuming 1, e.g.:
 \code
 mydb=# SELECT madlib.linear_svm_igd_predict(coefficients, features)
 mydb=# FROM linear_svm_data, linear_svm_model
@@ -98,6 +98,14 @@ CREATE TYPE MADLIB_SCHEMA.linear_svm_result AS (
         coefficients    DOUBLE PRECISION[],
         loss            DOUBLE PRECISION
 );
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_loss(
+        model    DOUBLE PRECISION[],
+        ind_var  DOUBLE PRECISION[],
+        dep_var  BOOLEAN)
+RETURNS DOUBLE PRECISION
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE;
 
 --------------------------------------------------------------------------
 -- create SQL functions for IGD optimizer
@@ -151,9 +159,9 @@ RETURNS DOUBLE PRECISION AS
 'MODULE_PATHNAME'
 LANGUAGE c IMMUTABLE STRICT;
 
-CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_igd_result(
+CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_igd_coef(
     /*+ state */ DOUBLE PRECISION[])
-RETURNS MADLIB_SCHEMA.linear_svm_result AS
+RETURNS DOUBLE PRECISION[] AS
 'MODULE_PATHNAME'
 LANGUAGE c IMMUTABLE STRICT;
 
@@ -191,7 +199,7 @@ LANGUAGE plpythonu VOLATILE;
  *   @param stepsize  Hyper-parameter that decides how aggressive that the gradient steps are
  *   @param num_iterations  Maximum number if iterations to perform regardless of convergence
  *   @param tolerance  Acceptable level of error in convergence.
- * 
+ *
  */
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_igd_run(
     rel_output      VARCHAR,
@@ -225,10 +233,10 @@ BEGIN
     PERFORM MADLIB_SCHEMA.internal_execute_using_linear_svm_igd_args($sql$
         DROP TABLE IF EXISTS pg_temp._madlib_linear_svm_igd_args;
         CREATE TABLE pg_temp._madlib_linear_svm_igd_args AS
-        SELECT 
-            $1 AS dimension, 
+        SELECT
+            $1 AS dimension,
             $2 AS stepsize,
-            $3 AS num_iterations, 
+            $3 AS num_iterations,
             $4 AS tolerance;
         $sql$,
         dimension, stepsize, num_iterations, tolerance);
@@ -259,33 +267,39 @@ BEGIN
     SELECT nextval(' || quote_literal(rel_output || '_id_seq') ||'::regclass)'
     INTO model_id;
 
-    -- output model
-    -- Retrieve result from state table and insert it
+    -- get model
+    EXECUTE '
+    DROP TABLE IF EXISTS pg_temp.model;
+    CREATE TABLE pg_temp.model AS
+    SELECT MADLIB_SCHEMA.internal_linear_svm_igd_coef(_state) AS coefficients
+        FROM _madlib_linear_svm_igd_state
+        WHERE _iteration = ' || iteration_run;
+
+    -- compute loss
+    EXECUTE '
+    SELECT sum(MADLIB_SCHEMA.linear_svm_loss(
+        (SELECT coefficients FROM pg_temp.model),
+        ' || col_ind_var || ', ' || col_dep_var || '))
+        FROM ' || rel_source
+    INTO loss;
+
+    -- output
     EXECUTE '
     INSERT INTO ' || rel_output || '
-    SELECT ' || model_id || ', (result).*
-    FROM (
-        SELECT MADLIB_SCHEMA.internal_linear_svm_igd_result(_state) AS result
-        FROM _madlib_linear_svm_igd_state
-        WHERE _iteration = ' || iteration_run || '
-        ) subq';
-
-    EXECUTE '
-    SELECT loss
-    FROM ' || rel_output || '
-    WHERE id = ' || model_id
-    INTO loss;
+    SELECT ' || model_id || ',
+        (SELECT coefficients FROM pg_temp.model),
+        ' || loss;
 
     -- return description
     RAISE NOTICE '
-Finished linear support vector machine using incremental gradient 
+Finished linear support vector machine using incremental gradient
  * table : % (%, %)
 Results:
  * loss = %
 Output:
  * view : SELECT * FROM % WHERE id = %',
     rel_source, col_ind_var, col_dep_var, loss, rel_output, model_id;
-    
+
     RETURN model_id;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
@@ -311,7 +325,7 @@ RETURNS INTEGER AS $$
     -- set stepsize as default 0.01
     SELECT MADLIB_SCHEMA.linear_svm_igd_run($1, $2, $3, $4, $5, 0.1);
 $$ LANGUAGE sql VOLATILE;
-    
+
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_igd_run(
     rel_output      VARCHAR,
     rel_source      REGCLASS,
@@ -330,19 +344,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql VOLATILE;
 
-/**
- * @brief Prediction (true or false) using learned coefficients for a given example.
- *
- * @param coefficients  Weight vector (hyperplane, classifier)
- * @param ind_var  Features (independent variables)
- *
- */
-CREATE FUNCTION MADLIB_SCHEMA.linear_svm_igd_predict(
-        coefficients    DOUBLE PRECISION[],
-        ind_var         DOUBLE PRECISION[])
-RETURNS BOOLEAN
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
 
 --------------------------------------------------------------------------
 -- create SQL functions for conjugate gradient optimizer
@@ -352,8 +353,7 @@ CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_transition(
         ind_var         DOUBLE PRECISION[],
         dep_var         BOOLEAN,
         previous_state  DOUBLE PRECISION[],
-        dimension       INTEGER,
-        stepsize        DOUBLE PRECISION)
+        dimension       INTEGER)
 RETURNS DOUBLE PRECISION[]
 AS 'MODULE_PATHNAME'
 LANGUAGE C IMMUTABLE;
@@ -380,14 +380,28 @@ CREATE AGGREGATE MADLIB_SCHEMA.linear_svm_cg_step(
         /*+ ind_var */          DOUBLE PRECISION[],
         /*+ dep_var */          BOOLEAN,
         /*+ previous_state */   DOUBLE PRECISION[],
-        /*+ dimension */        INTEGER,
-        /*+ stepsize */         DOUBLE PRECISION) (
+        /*+ dimension */        INTEGER) (
     STYPE=DOUBLE PRECISION[],
     SFUNC=MADLIB_SCHEMA.linear_svm_cg_transition,
     m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.linear_svm_cg_merge,')
     FINALFUNC=MADLIB_SCHEMA.linear_svm_cg_final,
     INITCOND='{0,0,0,0,0,0,0,0,0,0,0}'
 );
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_direction(
+    /*+ state */ DOUBLE PRECISION[])
+RETURNS DOUBLE PRECISION[] AS
+'MODULE_PATHNAME'
+LANGUAGE c IMMUTABLE STRICT;
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_update(
+    /*+ state */      DOUBLE PRECISION[],
+    /*+ direction */  DOUBLE PRECISION[],
+    /*+ dimension */  INTEGER,
+    /*+ stepsize */   DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION[] AS
+'MODULE_PATHNAME'
+LANGUAGE c IMMUTABLE STRICT;
 
 CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_cg_distance(
     /*+ state1 */ DOUBLE PRECISION[],
@@ -396,9 +410,9 @@ RETURNS DOUBLE PRECISION AS
 'MODULE_PATHNAME'
 LANGUAGE c IMMUTABLE STRICT;
 
-CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_cg_result(
+CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_cg_coef(
     /*+ state */ DOUBLE PRECISION[])
-RETURNS MADLIB_SCHEMA.linear_svm_result AS
+RETURNS DOUBLE PRECISION[] AS
 'MODULE_PATHNAME'
 LANGUAGE c IMMUTABLE STRICT;
 
@@ -436,7 +450,7 @@ LANGUAGE plpythonu VOLATILE;
  *   @param stepsize  Hyper-parameter that decides how aggressive that the gradient steps are
  *   @param num_iterations  Maximum number if iterations to perform regardless of convergence
  *   @param tolerance  Acceptable level of error in convergence.
- * 
+ *
  */
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(
     rel_output      VARCHAR,
@@ -451,6 +465,7 @@ RETURNS INTEGER AS $$
 DECLARE
     iteration_run   INTEGER;
     model_id        INTEGER;
+    model           DOUBLE PRECISION[];
     loss            DOUBLE PRECISION;
     old_messages    VARCHAR;
 BEGIN
@@ -470,10 +485,10 @@ BEGIN
     PERFORM MADLIB_SCHEMA.internal_execute_using_linear_svm_cg_args($sql$
         DROP TABLE IF EXISTS pg_temp._madlib_linear_svm_cg_args;
         CREATE TABLE pg_temp._madlib_linear_svm_cg_args AS
-        SELECT 
-            $1 AS dimension, 
+        SELECT
+            $1 AS dimension,
             $2 AS stepsize,
-            $3 AS num_iterations, 
+            $3 AS num_iterations,
             $4 AS tolerance;
         $sql$,
         dimension, stepsize, num_iterations, tolerance);
@@ -504,33 +519,39 @@ BEGIN
     SELECT nextval(' || quote_literal(rel_output || '_id_seq') ||'::regclass)'
     INTO model_id;
 
-    -- output model
-    -- Retrieve result from state table and insert it
+    -- get model
+    EXECUTE '
+    DROP TABLE IF EXISTS pg_temp.model;
+    CREATE TABLE pg_temp.model AS
+    SELECT MADLIB_SCHEMA.internal_linear_svm_cg_coef(_state) AS coefficients
+        FROM _madlib_linear_svm_cg_state
+        WHERE _iteration = ' || iteration_run;
+
+    -- compute loss
+    EXECUTE '
+    SELECT sum(MADLIB_SCHEMA.linear_svm_loss(
+        (SELECT coefficients FROM pg_temp.model),
+        ' || col_ind_var || ', ' || col_dep_var || '))
+        FROM ' || rel_source
+    INTO loss;
+
+    -- output
     EXECUTE '
     INSERT INTO ' || rel_output || '
-    SELECT ' || model_id || ', (result).*
-    FROM (
-        SELECT MADLIB_SCHEMA.internal_linear_svm_cg_result(_state) AS result
-        FROM _madlib_linear_svm_cg_state
-        WHERE _iteration = ' || iteration_run || '
-        ) subq';
-
-    EXECUTE '
-    SELECT loss
-    FROM ' || rel_output || '
-    WHERE id = ' || model_id
-    INTO loss;
+    SELECT ' || model_id || ',
+        (SELECT coefficients FROM pg_temp.model),
+        ' || loss;
 
     -- return description
     RAISE NOTICE '
-Finished linear support vector machine using incremental gradient 
+Finished linear support vector machine using incremental gradient
  * table : % (%, %)
 Results:
  * loss = %
 Output:
  * view : SELECT * FROM % WHERE id = %',
     rel_source, col_ind_var, col_dep_var, loss, rel_output, model_id;
-    
+
     RETURN model_id;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
@@ -556,7 +577,7 @@ RETURNS INTEGER AS $$
     -- set stepsize as default 0.01
     SELECT MADLIB_SCHEMA.linear_svm_cg_run($1, $2, $3, $4, $5, 0.1);
 $$ LANGUAGE sql VOLATILE;
-    
+
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(
     rel_output      VARCHAR,
     rel_source      REGCLASS,
@@ -582,7 +603,7 @@ $$ LANGUAGE plpgsql VOLATILE;
  * @param ind_var  Features (independent variables)
  *
  */
-CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_predict(
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_predict(
         coefficients    DOUBLE PRECISION[],
         ind_var         DOUBLE PRECISION[])
 RETURNS BOOLEAN

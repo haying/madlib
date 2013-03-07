@@ -20,6 +20,12 @@ DECLARE_UDF(convex, linear_svm_cg_merge)
 DECLARE_UDF(convex, linear_svm_cg_final)
 
 /**
+ * @brief Linear support vector machine (conjugate gradient): Search direction
+ */
+DECLARE_UDF(convex, linear_svm_cg_direction)
+DECLARE_UDF(convex, linear_svm_cg_update)
+
+/**
  * @brief Linear support vector machine (conjugate gradient): Difference in
  *     log-likelihood between two transition states
  */
@@ -27,12 +33,7 @@ DECLARE_UDF(convex, internal_linear_svm_cg_distance)
 
 /**
  * @brief Linear support vector machine (conjugate gradient): Convert
- *     transition state to result tuple
+ *     transition state to model coefficients
  */
-DECLARE_UDF(convex, internal_linear_svm_cg_result)
-
-/**
- * @brief Linear support vector machine (conjugate gradient): Prediction
- */
-DECLARE_UDF(convex, linear_svm_cg_predict)
+DECLARE_UDF(convex, internal_linear_svm_cg_coef)
 

@@ -426,6 +426,14 @@ public:
         rebind();
     }
 
+    GLMCGState(const AnyType &inArray, const Allocator &inAllocator) : mStorage(inArray.getAs<Handle>()) {
+        if (inArray.isNull()) {
+            mStorage = inAllocator.allocateArray<double, dbal::AggregateContext,
+                    dbal::DoZero, dbal::ThrowBadAlloc>(6);
+        }
+        rebind();
+    }
+
     /**
      * @brief Convert to backend representation
      *
@@ -471,7 +479,7 @@ public:
     }
 
     static inline uint32_t arraySize(const uint32_t inDimension) {
-        return 5 + 4 * inDimension;
+        return 4 + 4 * inDimension;
     }
 
 private:
@@ -482,27 +490,25 @@ private:
      * Inter-iteration components (updated in final function):
      * - 0: dimension (dimension of the model)
      * - 1: iteration (current number of iterations executed)
-     * - 2: stepsize (step size of gradient steps)
-     * - 3: model (coefficients)
-     * - 3 + dimension: direction (conjugate direction)
-     * - 3 + 2 * dimension: gradient (gradient of loss functions)
+     * - 2: model (coefficients)
+     * - 2 + dimension: direction (conjugate direction)
+     * - 2 + 2 * dimension: gradient (gradient of loss functions)
      *
      * Intra-iteration components (updated in transition step):
-     * - 3 + 3 * dimension: numRows (number of rows processed in this iteration)
-     * - 4 + 3 * dimension: loss (sum of loss for each rows)
-     * - 5 + 3 * dimension: incrGradient (volatile gradient for update)
+     * - 2 + 3 * dimension: numRows (number of rows processed in this iteration)
+     * - 3 + 3 * dimension: loss (sum of loss for each rows)
+     * - 4 + 3 * dimension: incrGradient (volatile gradient for update)
      */
     void rebind() {
         task.dimension.rebind(&mStorage[0]);
         task.iteration.rebind(&mStorage[1]);
-        task.stepsize.rebind(&mStorage[2]);
-        task.model.rebind(&mStorage[3], task.dimension);
-        task.direction.rebind(&mStorage[3 + task.dimension], task.dimension);
-        task.gradient.rebind(&mStorage[3 + 2 * task.dimension], task.dimension);
+        task.model.rebind(&mStorage[2], task.dimension);
+        task.direction.rebind(&mStorage[2 + task.dimension], task.dimension);
+        task.gradient.rebind(&mStorage[2 + 2 * task.dimension], task.dimension);
 
-        algo.numRows.rebind(&mStorage[3 + 3 * task.dimension]);
-        algo.loss.rebind(&mStorage[4 + 3 * task.dimension]);
-        algo.incrGradient.rebind(&mStorage[5 + 3 * task.dimension],
+        algo.numRows.rebind(&mStorage[2 + 3 * task.dimension]);
+        algo.loss.rebind(&mStorage[3 + 3 * task.dimension]);
+        algo.incrGradient.rebind(&mStorage[4 + 3 * task.dimension],
                 task.dimension);
     }
 
@@ -515,7 +521,6 @@ public:
     struct TaskState {
         typename HandleTraits<Handle>::ReferenceToUInt32 dimension;
         typename HandleTraits<Handle>::ReferenceToUInt32 iteration;
-        typename HandleTraits<Handle>::ReferenceToDouble stepsize;
         TransparentColumnVector model;
         TransparentColumnVector direction;
         TransparentColumnVector gradient;

@@ -55,10 +55,7 @@ linear_svm_cg_transition::run(AnyType &args) {
         } else {
             // configuration parameters
             uint32_t dimension = args[4].getAs<uint32_t>();
-            double stepsize = args[5].getAs<double>();
-
             state.allocate(*this, dimension); // with zeros
-            state.task.stepsize = stepsize;
         }
         // resetting in either case
         state.reset();
@@ -125,6 +122,37 @@ linear_svm_cg_final::run(AnyType &args) {
 }
 
 /**
+ * @brief Return the search direction
+ */
+AnyType
+linear_svm_cg_direction::run(AnyType &args) {
+    GLMCGState<ArrayHandle<double> > state = args[0];
+
+    return state.task.direction;
+}
+
+/**
+ * @brief Update the model using the search direction
+ */
+AnyType
+linear_svm_cg_update::run(AnyType &args) {
+    GLMCGState<MutableArrayHandle<double> > state = args[0];
+
+    if (state.task.dimension == 0) {
+        uint32_t dimension = args[2].getAs<uint32_t>();
+        state.allocate(*this, dimension); // with zeros
+    }
+
+    using madlib::dbal::eigen_integration::MappedColumnVector;
+    MappedColumnVector direction = args[1].getAs<MappedColumnVector>().memoryHandle();
+    double stepsize = args[3].getAs<double>();
+
+    state.task.model += stepsize * direction;
+
+    return state;
+}
+
+/**
  * @brief Return the difference in RMSE between two states
  */
 AnyType
@@ -137,31 +165,13 @@ internal_linear_svm_cg_distance::run(AnyType &args) {
 }
 
 /**
- * @brief Return the coefficients and diagnostic statistics of the state
+ * @brief Return the coefficients of the state
  */
 AnyType
-internal_linear_svm_cg_result::run(AnyType &args) {
+internal_linear_svm_cg_coef::run(AnyType &args) {
     GLMCGState<ArrayHandle<double> > state = args[0];
 
-    AnyType tuple;
-    tuple << state.task.model
-        << static_cast<double>(state.algo.loss);
-
-    return tuple;
-}
-
-/**
- * @brief Return the prediction reselt
- */
-AnyType
-linear_svm_cg_predict::run(AnyType &args) {
-    using madlib::dbal::eigen_integration::MappedColumnVector;
-    MappedColumnVector model = args[0].getAs<MappedColumnVector>();
-    MappedColumnVector indVar = args[1].getAs<MappedColumnVector>();
-
-    double p = LinearSVM<MappedColumnVector, GLMTuple>::predict(model, indVar);
-
-    return (p > 0.);
+    return state.task.model;
 }
 
 } // namespace convex

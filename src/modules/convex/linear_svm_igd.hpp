@@ -29,10 +29,5 @@ DECLARE_UDF(convex, internal_linear_svm_igd_distance)
  * @brief Linear support vector machine (incremental gradient): Convert
  *     transition state to result tuple
  */
-DECLARE_UDF(convex, internal_linear_svm_igd_result)
-
-/**
- * @brief Linear support vector machine (incremental gradient): Prediction
- */
-DECLARE_UDF(convex, linear_svm_igd_predict)
+DECLARE_UDF(convex, internal_linear_svm_igd_coef)
 

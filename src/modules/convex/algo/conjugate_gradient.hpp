@@ -116,9 +116,6 @@ ConjugateGradient<State, ConstState, Task>::final(state_type &state) {
 
     // updating gradient
     state.task.gradient = state.algo.incrGradient;
-
-    // updating model
-    state.task.model += state.task.stepsize * state.task.direction;
 }
 
 } // namespace convex

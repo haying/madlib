@@ -40,21 +40,70 @@ def compute_linear_svm_cg(schema_madlib, rel_args, rel_state, rel_source,
         schema_madlib = schema_madlib, # Identifiers start here
         rel_source = rel_source,
         col_ind_var = col_ind_var,
-        col_dep_var = col_dep_var)
+        col_dep_var = col_dep_var,
+        rel_direction = 'pg_temp._madlib_linear_svm_cg_direction')
     with iterationCtrl as it:
         it.iteration = 0
-        while True:
-            it.update("""
-                SELECT
-                    {schema_madlib}.linear_svm_cg_step(
-                        (_src.{col_ind_var})::FLOAT8[], 
+        it.runSQL("""
+            DROP TABLE IF EXISTS {rel_direction};
+            CREATE TEMP TABLE {rel_direction} (
+                _iteration INTEGER PRIMARY KEY,
+                _direction DOUBLE PRECISION[]
+            )
+            """.format(
+                temp = 'TEMPORARY' if it.temporaryTables else '',
+                **it.kwargs))
+
+        # run cg to compute search direction and insert to a temp table
+        it.runSQL("""
+            INSERT INTO {rel_direction}
+            SELECT {iteration},
+                (SELECT {schema_madlib}.linear_svm_cg_direction(
+                    (SELECT {schema_madlib}.linear_svm_cg_step(
+                        (_src.{col_ind_var})::FLOAT8[],
                         (_src.{col_dep_var})::BOOLEAN,
                         (SELECT _state FROM {rel_state}
                             WHERE _iteration = {iteration}),
-                        (_args.dimension)::INT4,
-                        (_args.stepsize)::FLOAT8)
-                FROM {rel_source} AS _src, {rel_args} AS _args
+                        (_args.dimension)::INT4)
+                        FROM {rel_source} AS _src, {rel_args} AS _args)))
+            """.format(iteration=it.iteration, **it.kwargs))
+        # use step size and update the model
+        it.update("""
+            SELECT {schema_madlib}.linear_svm_cg_update(
+                ARRAY[0, 0, 0, 0, 0, 0],
+                (SELECT _direction FROM {rel_direction}
+                    WHERE _iteration = {iteration}),
+                (_args.dimension)::INT4,
+                (_args.stepsize)::FLOAT8)
+            FROM {rel_args} AS _args
+            """)
+
+        while True:
+            # run cg to compute search direction and insert to a temp table
+            it.runSQL("""
+                INSERT INTO {rel_direction}
+                SELECT {iteration},
+                    (SELECT {schema_madlib}.linear_svm_cg_direction(
+                        (SELECT {schema_madlib}.linear_svm_cg_step(
+                            (_src.{col_ind_var})::FLOAT8[],
+                            (_src.{col_dep_var})::BOOLEAN,
+                            (SELECT _state FROM {rel_state}
+                                WHERE _iteration = {iteration}),
+                            (_args.dimension)::INT4)
+                            FROM {rel_source} AS _src, {rel_args} AS _args)))
+                """.format(iteration=it.iteration, **it.kwargs))
+            # use step size and update the model
+            it.update("""
+                SELECT {schema_madlib}.linear_svm_cg_update(
+                    (SELECT _state FROM {rel_state}
+                        WHERE _iteration = {iteration}),
+                    (SELECT _direction FROM {rel_direction}
+                        WHERE _iteration = {iteration}),
+                    (_args.dimension)::INT4,
+                    (_args.stepsize)::FLOAT8)
+                FROM {rel_args} AS _args
                 """)
+
             if it.test("""
                 {iteration} > _args.num_iterations OR
                 {schema_madlib}.internal_linear_svm_cg_distance(

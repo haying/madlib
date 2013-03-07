@@ -134,31 +134,13 @@ internal_linear_svm_igd_distance::run(AnyType &args) {
 }
 
 /**
- * @brief Return the coefficients and diagnostic statistics of the state
+ * @brief Return the coefficients of the state
  */
 AnyType
-internal_linear_svm_igd_result::run(AnyType &args) {
+internal_linear_svm_igd_coef::run(AnyType &args) {
     GLMIGDState<ArrayHandle<double> > state = args[0];
 
-    AnyType tuple;
-    tuple << state.task.model
-        << static_cast<double>(state.algo.loss);
-
-    return tuple;
-}
-
-/**
- * @brief Return the prediction reselt
- */
-AnyType
-linear_svm_igd_predict::run(AnyType &args) {
-    using madlib::dbal::eigen_integration::MappedColumnVector;
-    MappedColumnVector model = args[0].getAs<MappedColumnVector>();
-    MappedColumnVector indVar = args[1].getAs<MappedColumnVector>();
-
-    double p = LinearSVM<MappedColumnVector, GLMTuple>::predict(model, indVar);
-
-    return (p > 0.);
+    return state.task.model;
 }
 
 } // namespace convex
