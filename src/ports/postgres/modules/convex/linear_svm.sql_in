@@ -107,6 +107,55 @@ RETURNS DOUBLE PRECISION
 AS 'MODULE_PATHNAME'
 LANGUAGE C IMMUTABLE;
 
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_best_ball_transition(
+        state      DOUBLE PRECISION[],
+        ind_var    DOUBLE PRECISION[],
+        dep_var    BOOLEAN,
+        model      DOUBLE PRECISION[],
+        direction  DOUBLE PRECISION[],
+        stepsizes  DOUBLE PRECISION[])
+RETURNS DOUBLE PRECISION[]
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE;
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_best_ball_merge(
+        state1 DOUBLE PRECISION[],
+        state2 DOUBLE PRECISION[])
+RETURNS DOUBLE PRECISION[]
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_best_ball_final(
+        state DOUBLE PRECISION[])
+RETURNS DOUBLE PRECISION[]
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+/**
+ * @internal
+ * @brief Perform best ball for computing linear support vector machine
+ */
+CREATE AGGREGATE MADLIB_SCHEMA.linear_svm_best_ball_step(
+        /*+ ind_var */    DOUBLE PRECISION[],
+        /*+ dep_var */    BOOLEAN,
+        /*+ model */      DOUBLE PRECISION[],
+        /*+ direction */  DOUBLE PRECISION[],
+        /*+ stepsizes */  DOUBLE PRECISION[]) (
+    STYPE=DOUBLE PRECISION[],
+    SFUNC=MADLIB_SCHEMA.linear_svm_best_ball_transition,
+    m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.linear_svm_best_ball_merge,')
+    FINALFUNC=MADLIB_SCHEMA.linear_svm_best_ball_final,
+    INITCOND='{0,0,0,0,0,0,0,0,0,0,0}'
+);
+
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_greedy_step_size(
+        loss_list  DOUBLE PRECISION[],
+        stepsizes  DOUBLE PRECISION[])
+RETURNS DOUBLE PRECISION
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+
 --------------------------------------------------------------------------
 -- create SQL functions for IGD optimizer
 --------------------------------------------------------------------------
@@ -396,8 +445,6 @@ LANGUAGE c IMMUTABLE STRICT;
 
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_update(
     /*+ state */      DOUBLE PRECISION[],
-    /*+ direction */  DOUBLE PRECISION[],
-    /*+ dimension */  INTEGER,
     /*+ stepsize */   DOUBLE PRECISION)
 RETURNS DOUBLE PRECISION[] AS
 'MODULE_PATHNAME'
@@ -410,7 +457,7 @@ RETURNS DOUBLE PRECISION AS
 'MODULE_PATHNAME'
 LANGUAGE c IMMUTABLE STRICT;
 
-CREATE FUNCTION MADLIB_SCHEMA.internal_linear_svm_cg_coef(
+CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_coef(
     /*+ state */ DOUBLE PRECISION[])
 RETURNS DOUBLE PRECISION[] AS
 'MODULE_PATHNAME'
@@ -418,7 +465,7 @@ LANGUAGE c IMMUTABLE STRICT;
 
 
 CREATE FUNCTION MADLIB_SCHEMA.internal_execute_using_linear_svm_cg_args(
-    sql VARCHAR, INTEGER, DOUBLE PRECISION, INTEGER, DOUBLE PRECISION)
+    sql VARCHAR, INTEGER, DOUBLE PRECISION[], INTEGER, DOUBLE PRECISION)
 RETURNS VOID
 IMMUTABLE
 CALLED ON NULL INPUT
@@ -447,7 +494,7 @@ LANGUAGE plpythonu VOLATILE;
  *   @param col_ind_var  Name of the column containing feature vector (independent variables)
  *   @param col_dep_var  Name of the column containing label (dependent variable)
  *   @param dimension  Number of features (independent variables)
- *   @param stepsize  Hyper-parameter that decides how aggressive that the gradient steps are
+ *   @param stepsizes  Hyper-parameter that decides how aggressive that the gradient steps are
  *   @param num_iterations  Maximum number if iterations to perform regardless of convergence
  *   @param tolerance  Acceptable level of error in convergence.
  *
@@ -458,7 +505,7 @@ CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(
     col_ind_var     VARCHAR,
     col_dep_var     VARCHAR,
     dimension       INTEGER /*+ DEFAULT 'SELECT max(array_upper(col_ind_var, 1)) FROM rel_source' */,
-    stepsize        DOUBLE PRECISION /*+ DEFAULT 0.01 */,
+    stepsizes       DOUBLE PRECISION[] /*+ DEFAULT {0.01} */,
     num_iterations  INTEGER /*+ DEFAULT 10 */,
     tolerance       DOUBLE PRECISION /*+ DEFAULT 0.000001 */)
 RETURNS INTEGER AS $$
@@ -487,11 +534,11 @@ BEGIN
         CREATE TABLE pg_temp._madlib_linear_svm_cg_args AS
         SELECT
             $1 AS dimension,
-            $2 AS stepsize,
+            $2 AS stepsizes,
             $3 AS num_iterations,
             $4 AS tolerance;
         $sql$,
-        dimension, stepsize, num_iterations, tolerance);
+        dimension, stepsizes, num_iterations, tolerance);
     EXECUTE 'SET client_min_messages TO ' || old_messages;
 
     -- Perform acutal computation.
@@ -523,7 +570,7 @@ BEGIN
     EXECUTE '
     DROP TABLE IF EXISTS pg_temp.model;
     CREATE TABLE pg_temp.model AS
-    SELECT MADLIB_SCHEMA.internal_linear_svm_cg_coef(_state) AS coefficients
+    SELECT MADLIB_SCHEMA.linear_svm_cg_coef(_state) AS coefficients
         FROM _madlib_linear_svm_cg_state
         WHERE _iteration = ' || iteration_run;
 
@@ -562,7 +609,7 @@ CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(
     col_ind_var     VARCHAR,
     col_dep_var     VARCHAR,
     dimension       INTEGER,
-    stepsize        DOUBLE PRECISION)
+    stepsizes       DOUBLE PRECISION[])
 RETURNS INTEGER AS $$
     SELECT MADLIB_SCHEMA.linear_svm_cg_run($1, $2, $3, $4, $5, $6, 10, 0.000001);
 $$ LANGUAGE sql VOLATILE;
@@ -575,7 +622,7 @@ CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(
     dimension       INTEGER)
 RETURNS INTEGER AS $$
     -- set stepsize as default 0.01
-    SELECT MADLIB_SCHEMA.linear_svm_cg_run($1, $2, $3, $4, $5, 0.1);
+    SELECT MADLIB_SCHEMA.linear_svm_cg_run($1, $2, $3, $4, $5, ARRAY[0.01]);
 $$ LANGUAGE sql VOLATILE;
 
 CREATE FUNCTION MADLIB_SCHEMA.linear_svm_cg_run(

@@ -116,7 +116,7 @@ linear_svm_cg_final::run(AnyType &args) {
     state.task.iteration ++;
     
     // debug code
-    dberr << "loss: " << state.algo.loss << std::endl;
+    // dberr << "loss: " << state.algo.loss << std::endl;
  
     return state;
 }
@@ -138,16 +138,9 @@ AnyType
 linear_svm_cg_update::run(AnyType &args) {
     GLMCGState<MutableArrayHandle<double> > state = args[0];
 
-    if (state.task.dimension == 0) {
-        uint32_t dimension = args[2].getAs<uint32_t>();
-        state.allocate(*this, dimension); // with zeros
-    }
+    double stepsize = args[1].getAs<double>();
 
-    using madlib::dbal::eigen_integration::MappedColumnVector;
-    MappedColumnVector direction = args[1].getAs<MappedColumnVector>().memoryHandle();
-    double stepsize = args[3].getAs<double>();
-
-    state.task.model += stepsize * direction;
+    state.task.model += stepsize * state.task.direction;
 
     return state;
 }
@@ -160,6 +153,10 @@ internal_linear_svm_cg_distance::run(AnyType &args) {
     GLMCGState<ArrayHandle<double> > stateLeft = args[0];
     GLMCGState<ArrayHandle<double> > stateRight = args[1];
 
+    // dberr << "loss: " << stateLeft.algo.loss
+    //     << " -> " << stateRight.algo.loss
+    //     << std::endl;
+
     return std::abs((stateLeft.algo.loss - stateRight.algo.loss)
             / stateRight.algo.loss);
 }
@@ -168,7 +165,7 @@ internal_linear_svm_cg_distance::run(AnyType &args) {
  * @brief Return the coefficients of the state
  */
 AnyType
-internal_linear_svm_cg_coef::run(AnyType &args) {
+linear_svm_cg_coef::run(AnyType &args) {
     GLMCGState<ArrayHandle<double> > state = args[0];
 
     return state.task.model;

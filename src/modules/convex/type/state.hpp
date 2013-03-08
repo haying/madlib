@@ -71,7 +71,7 @@ public:
         task.rowDim = inRowDim;
         task.colDim = inColDim;
         task.maxRank = inMaxRank;
-        
+
         // This time all the member fields are correctly binded
         rebind();
     }
@@ -108,7 +108,7 @@ public:
         task.RMSE = sqrt(algo.loss / static_cast<double>(algo.numRows));
     }
 
-    static inline uint32_t arraySize(const uint16_t inRowDim, 
+    static inline uint32_t arraySize(const uint16_t inRowDim,
             const uint16_t inColDim, const uint16_t inMaxRank) {
         return 8 + 2 * LMFModel<Handle>::arraySize(inRowDim, inColDim, inMaxRank);
     }
@@ -177,7 +177,7 @@ public:
 /**
  * @brief Inter- (Task State) and intra-iteration (Algo State) state of
  *        incremental gradient descent for generalized linear models
- * 
+ *
  * Generalized Linear Models (GLMs): Logistic regression, Linear SVM
  *
  * TransitionState encapsualtes the transition state during the
@@ -219,7 +219,7 @@ public:
 
         task.dimension.rebind(&mStorage[0]);
         task.dimension = inDimension;
-        
+
         rebind();
     }
 
@@ -319,7 +319,7 @@ public:
 
         task.dimension.rebind(&mStorage[0]);
         task.dimension = inDimension;
-        
+
         rebind();
     }
 
@@ -403,7 +403,7 @@ public:
 /**
  * @brief Inter- (Task State) and intra-iteration (Algo State) state of
  *        Conjugate Gradient for generalized linear models
- * 
+ *
  * Generalized Linear Models (GLMs): Logistic regression, Linear SVM
  *
  * TransitionState encapsualtes the transition state during the
@@ -453,7 +453,7 @@ public:
 
         task.dimension.rebind(&mStorage[0]);
         task.dimension = inDimension;
-        
+
         rebind();
     }
 
@@ -537,9 +537,9 @@ public:
  * @brief Inter- (Task State) and intra-iteration (Algo State) state of
  *        Newton's method for generic objective functions (any tasks)
  *
- * This class assumes that the coefficients are of type vector. Low-rank 
+ * This class assumes that the coefficients are of type vector. Low-rank
  * matrix factorization, neural networks would not be able to use this.
- * 
+ *
  * TransitionState encapsualtes the transition state during the
  * aggregate function during an iteration. To the database, the state is
  * exposed as a single DOUBLE PRECISION array, to the C++ code it is a proper
@@ -579,7 +579,7 @@ public:
 
         task.dimension.rebind(&mStorage[0]);
         task.dimension = inDimension;
-        
+
         rebind();
     }
 
@@ -650,6 +650,97 @@ public:
         typename HandleTraits<Handle>::MatrixTransparentHandleMap hessian;
     } algo;
 };
+
+/**
+ * @brief state of Best Ball for generalized linear models
+ *
+ * Generalized Linear Models (GLMs): Logistic regression, Linear SVM
+ *
+ * TransitionState encapsualtes the transition state during the
+ * aggregate function during an iteration. To the database, the state is
+ * exposed as a single DOUBLE PRECISION array, to the C++ code it is a proper
+ * object containing scalars and vectors.
+ *
+ * Note: We assume that the DOUBLE PRECISION array is initialized by the
+ * database with length at least 5, and at least first elemenet is 0
+ * (exact values of other elements are ignored).
+ *
+ */
+template <class Handle>
+class GLMBestBallState {
+    template <class OtherHandle>
+    friend class GLMBestBallState;
+
+public:
+    GLMBestBallState(const AnyType &inArray) : mStorage(inArray.getAs<Handle>()) {
+        rebind();
+    }
+
+    /**
+     * @brief Convert to backend representation
+     *
+     * We define this function so that we can use State in the
+     * argument list and as a return type.
+     */
+    inline operator AnyType() const {
+        return mStorage;
+    }
+
+    /**
+     * @brief Allocating the incremental gradient state.
+     */
+    inline void allocate(const Allocator &inAllocator, uint32_t inDimension) {
+        mStorage = inAllocator.allocateArray<double, dbal::AggregateContext,
+                dbal::DoZero, dbal::ThrowBadAlloc>(arraySize(inDimension));
+
+        dimension.rebind(&mStorage[0]);
+        dimension = inDimension;
+
+        rebind();
+    }
+
+    /**
+     * @brief We need to support assigning the previous state
+     */
+    template <class OtherHandle>
+    GLMBestBallState &operator=(const GLMBestBallState<OtherHandle> &inOtherState) {
+        for (size_t i = 0; i < mStorage.size(); i++) {
+            mStorage[i] = inOtherState.mStorage[i];
+        }
+
+        return *this;
+    }
+
+    /**
+     * @brief Reset the intra-iteration fields.
+     */
+    inline void reset() {
+        numRows = 0;
+        loss_list = ColumnVector::Zero(dimension);
+    }
+
+    static inline uint32_t arraySize(const uint32_t inDimension) {
+        return 2 +  inDimension;
+    }
+
+private:
+    void rebind() {
+        dimension.rebind(&mStorage[0]);
+        numRows.rebind(&mStorage[1]);
+        loss_list.rebind(&mStorage[2], dimension);
+    }
+
+    Handle mStorage;
+
+public:
+    typedef typename HandleTraits<Handle>::ColumnVectorTransparentHandleMap
+        TransparentColumnVector;
+
+    typename HandleTraits<Handle>::ReferenceToUInt32 dimension;
+    typename HandleTraits<Handle>::ReferenceToUInt64 numRows;
+    TransparentColumnVector loss_list;
+};
+
 
 } // namespace convex
 

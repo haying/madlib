@@ -7168,10 +7168,10 @@ BEGIN
         'svmguide1_normalized',
         'features', 
         'class',
-        5,          -- row_dimension
-        0.0005,     -- stepsize
-        20,         -- num_iterations
-        1e-6        -- tolerance
+        5,                              -- row_dimension
+        ARRAY[1e-3, 1e-4, 1e-5, 1e-6],  -- stepsizes
+        20,                             -- num_iterations
+        1e-6                            -- tolerance
         )
     INTO model_id;
 
