@@ -20,3 +20,6 @@ DECLARE_UDF(convex, linear_svm_best_ball_final)
 
 DECLARE_UDF(convex, linear_svm_greedy_step_size)
 
+DECLARE_UDF(convex, linear_svm_loss_bb_transition)
+DECLARE_UDF(convex, linear_svm_loss_bb_final)
+

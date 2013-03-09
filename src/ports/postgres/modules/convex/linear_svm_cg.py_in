@@ -55,48 +55,6 @@ def compute_linear_svm_cg(schema_madlib, rel_args, rel_state, rel_source,
                 temp = 'TEMPORARY' if it.temporaryTables else '',
                 **it.kwargs))
 
-        # run cg to compute search direction and insert to a temp table
-        it.runSQL("""
-            INSERT INTO {rel_internal}
-            SELECT {iteration},
-                (SELECT {schema_madlib}.linear_svm_cg_step(
-                    (_src.{col_ind_var})::FLOAT8[],
-                    (_src.{col_dep_var})::BOOLEAN,
-                    NULL,
-                    (_args.dimension)::INT4)
-                    FROM {rel_source} AS _src, {rel_args} AS _args),
-                NULL
-            """.format(iteration=it.iteration, **it.kwargs))
-
-        it.runSQL("""
-            UPDATE {rel_internal} SET _stepsize =
-                (SELECT {schema_madlib}.linear_svm_greedy_step_size(
-                    (SELECT {schema_madlib}.linear_svm_best_ball_step(
-                        (_src.{col_ind_var})::FLOAT8[],
-                        (_src.{col_dep_var})::BOOLEAN,
-                        (SELECT {schema_madlib}.linear_svm_cg_coef(_state)
-                            FROM {rel_internal}
-                            WHERE _iteration = {iteration}),
-                        (SELECT {schema_madlib}.linear_svm_cg_direction(_state)
-                            FROM {rel_internal}
-                            WHERE _iteration = {iteration}),
-                        (SELECT _args.stepsizes
-                            FROM {rel_args} AS _args))
-                        FROM {rel_source} AS _src),
-                    (SELECT _args.stepsizes
-                        FROM {rel_args} AS _args)))
-            WHERE _iteration = {iteration}
-            """.format(iteration=it.iteration, **it.kwargs))
-
-        # use step size and update the model
-        it.update("""
-            SELECT {schema_madlib}.linear_svm_cg_update(
-                _state,
-                _stepsize)
-            FROM {rel_internal}
-            WHERE _iteration = {iteration}
-            """)
-
         while True:
             # run cg to compute search direction and insert to a temp table
             it.runSQL("""

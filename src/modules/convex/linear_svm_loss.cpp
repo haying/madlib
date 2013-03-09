@@ -124,6 +124,87 @@ linear_svm_greedy_step_size::run(AnyType &args) {
     return stepsizes(mini);
 }
 
+AnyType
+linear_svm_loss_bb_transition::run(AnyType &args) {
+    MutableArrayHandle<double> storage = args[0].getAs<MutableArrayHandle<double> >();
+    std::vector<GLMLossBBState> states;
+    uint32_t numOfStepsizes = 0;
+
+    if (storage[0] == 0) {
+        // configuration parameters
+        ArrayHandle<double> start = args[3].getAs<ArrayHandle<double> >();
+        std::vector<GLMLossBBState> start_states;
+        HandleTraits<ArrayHandle<double> >::ReferenceToUInt32 dimension;
+        dimension.rebind(&start[0]);
+        uint32_t arraySize = GLMLossBBState::arraySize(dimension) + 1;
+        numOfStepsizes = start.size() / arraySize;
+        storage = this->allocateArray<double, dbal::AggregateContext, dbal::DoZero,
+                dbal::ThrowBadAlloc>(start.size());
+        for (uint32_t i = 0; i < start.size(); i ++) {
+            storage[i] = start[i];
+        }
+        for (uint32_t i = 0; i < numOfStepsizes; i ++) {
+            states.push_back(GLMLossBBState(&storage[i * arraySize], dimension));
+        }
+    } else {
+        HandleTraits<ArrayHandle<double> >::ReferenceToUInt32 dimension;
+        dimension.rebind(&storage[0]);
+        uint32_t arraySize = GLMLossBBState::arraySize(dimension) + 1;
+        numOfStepsizes = storage.size() / arraySize;
+        for (uint32_t i = 0; i < numOfStepsizes;i ++) {
+            states.push_back(GLMLossBBState(&storage[i * arraySize], dimension));
+        }
+    }
+
+    // tuple
+    using madlib::dbal::eigen_integration::MappedColumnVector;
+    GLMTuple tuple;
+    tuple.indVar.rebind(args[1].getAs<MappedColumnVector>().memoryHandle());
+    tuple.depVar = args[2].getAs<bool>() ? 1. : -1.;
+
+    for (uint32_t i = 0; i < numOfStepsizes; i ++) {
+        double loss = LinearSVM<GLMModel, GLMTuple >::loss(states[i].task.model,
+                tuple.indVar, tuple.depVar);
+        states[i].algo.loss += loss;
+    }
+
+    return storage;
+}
+
+AnyType
+linear_svm_loss_bb_final::run(AnyType &args) {
+    MutableArrayHandle<double> storage = args[0].getAs<MutableArrayHandle<double> >();
+    std::vector<GLMLossBBState> states;
+    uint32_t numOfStepsizes = 0;
+
+    // Aggregates that haven't seen any data just return Null.
+    if (storage[0] == 0) { return Null(); }
+
+    HandleTraits<ArrayHandle<double> >::ReferenceToUInt32 dimension;
+    dimension.rebind(&storage[0]);
+    uint32_t arraySize = GLMLossBBState::arraySize(dimension) + 1;
+    numOfStepsizes = storage.size() / arraySize;
+
+    int min_i = -1;
+    double min = 0;
+    for (uint32_t i = 0; i < numOfStepsizes; i ++) {
+        states.push_back(GLMLossBBState(&storage[i * arraySize], dimension));
+        if (min_i < 0 || min > states[i].algo.loss) {
+            min_i = i;
+            min = states[i].algo.loss;
+        }
+    }
+
+    AnyType tuple;
+    tuple << states[min_i].task.model << min;
+
+    // dberr << "loss: " << min << std::endl;
+
+    return tuple;
+}
+
+
+
 } // namespace convex
 
 } // namespace modules

@@ -195,6 +195,8 @@ class GLMIGDState {
     template <class OtherHandle>
     friend class GLMIGDState;
 
+    friend class GLMIGDBBState;
+
 public:
     GLMIGDState(const AnyType &inArray) : mStorage(inArray.getAs<Handle>()) {
         rebind();
@@ -287,6 +289,93 @@ public:
         typename HandleTraits<Handle>::ReferenceToDouble loss;
         typename HandleTraits<Handle>::ColumnVectorTransparentHandleMap
             incrModel;
+    } algo;
+};
+
+class GLMIGDBBState {
+public:
+    GLMIGDBBState(double* inAddress, uint32_t inDimension) : mStorage(inAddress) {
+        task.dimension.rebind(&mStorage[0]);
+        task.dimension = inDimension;
+        rebind();
+    }
+
+    /**
+     * @brief We need to support assigning the previous state
+     */
+    template <class Handle>
+    GLMIGDBBState &operator=(const GLMIGDState<Handle> &inOtherState) {
+        for (size_t i = 0; i < inOtherState.mStorage.size(); i ++) {
+            mStorage[i] = inOtherState.mStorage[i];
+        }
+
+        return *this;
+    }
+
+    static inline uint32_t arraySize(const uint32_t inDimension) {
+        return 4 + 2 * inDimension;
+    }
+
+protected:
+    void rebind() {
+        task.dimension.rebind(&mStorage[0]);
+        task.stepsize.rebind(&mStorage[1]);
+        task.model.rebind(&mStorage[2], task.dimension);
+
+        algo.numRows.rebind(&mStorage[2 + task.dimension]);
+        algo.loss.rebind(&mStorage[3 + task.dimension]);
+        algo.incrModel.rebind(&mStorage[4 + task.dimension], task.dimension);
+    }
+
+    double* mStorage;
+
+public:
+    struct TaskState {
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToUInt32 dimension;
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToDouble stepsize;
+        HandleTraits<MutableArrayHandle<double> >::ColumnVectorTransparentHandleMap model;
+    } task;
+
+    struct AlgoState {
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToUInt64 numRows;
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToDouble loss;
+        HandleTraits<MutableArrayHandle<double> >::ColumnVectorTransparentHandleMap
+            incrModel;
+    } algo;
+};
+
+class GLMLossBBState {
+public:
+    GLMLossBBState(double* inAddress, uint32_t inDimension) : mStorage(inAddress) {
+        task.dimension.rebind(&mStorage[0]);
+        task.dimension = inDimension;
+        rebind();
+    }
+
+    static inline uint32_t arraySize(const uint32_t inDimension) {
+        return 3 + inDimension;
+    }
+
+protected:
+    void rebind() {
+        task.dimension.rebind(&mStorage[0]);
+        task.stepsize.rebind(&mStorage[1]);
+        task.model.rebind(&mStorage[2], task.dimension);
+
+        algo.loss.rebind(&mStorage[2 + task.dimension]);
+    }
+
+    double* mStorage;
+
+public:
+    struct TaskState {
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToUInt32 dimension;
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToDouble stepsize;
+        HandleTraits<MutableArrayHandle<double> >::ColumnVectorTransparentHandleMap model;
+    } task;
+
+    struct AlgoState {
+        HandleTraits<MutableArrayHandle<double> >::ReferenceToDouble loss;
     } algo;
 };
 

@@ -47,13 +47,104 @@ def compute_linear_svm_igd(schema_madlib, rel_args, rel_state, rel_source,
             it.update("""
                 SELECT
                     {schema_madlib}.linear_svm_igd_step(
-                        (_src.{col_ind_var})::FLOAT8[], 
+                        (_src.{col_ind_var})::FLOAT8[],
                         (_src.{col_dep_var})::BOOLEAN,
                         (SELECT _state FROM {rel_state}
                             WHERE _iteration = {iteration}),
                         (_args.dimension)::INT4,
                         (_args.stepsize)::FLOAT8)
                 FROM {rel_source} AS _src, {rel_args} AS _args
+                """)
+            if it.test("""
+                {iteration} > _args.num_iterations OR
+                {schema_madlib}.internal_linear_svm_igd_distance(
+                    (SELECT _state FROM {rel_state}
+                        WHERE _iteration = {iteration} - 1),
+                    (SELECT _state FROM {rel_state}
+                        WHERE _iteration = {iteration})) < _args.tolerance
+                """):
+                break
+    return iterationCtrl.iteration
+
+
+def compute_linear_svm_igd_bb(schema_madlib, rel_args, rel_state, rel_source,
+    col_ind_var, col_dep_var, **kwargs):
+    iterationCtrl = IterationController(
+        rel_args = rel_args,
+        rel_state = rel_state,
+        stateType = "{schema_madlib}.linear_svm_result",
+        truncAfterIteration = False,
+        schema_madlib = schema_madlib, # Identifiers start here
+        rel_source = rel_source,
+        col_ind_var = col_ind_var,
+        col_dep_var = col_dep_var)
+    with iterationCtrl as it:
+        it.iteration = 0
+        while True:
+            it.update("""
+                SELECT {schema_madlib}.linear_svm_loss_bb_step(
+                    (_src.{col_ind_var})::FLOAT8[],
+                    (_src.{col_dep_var})::BOOLEAN,
+                    (SELECT {schema_madlib}.linear_svm_igd_bb_step(
+                        (_src.{col_ind_var})::FLOAT8[],
+                        (_src.{col_dep_var})::BOOLEAN,
+                        (SELECT (_state).coefficients FROM {rel_state}
+                            WHERE _iteration = {iteration}),
+                        _args.dimension,
+                        _args.stepsizes)
+                    FROM {rel_source} AS _src, {rel_args} AS _args))
+                FROM {rel_source} AS _src
+                """)
+            if it.test("""
+                {iteration} > _args.num_iterations OR
+                (SELECT (_state).loss FROM {rel_state}
+                    WHERE _iteration = {iteration}) < _args.tolerance
+                """):
+                break
+    return iterationCtrl.iteration
+
+
+def compute_linear_svm_igd_bb_seq(schema_madlib, rel_args, rel_state, rel_source,
+    col_ind_var, col_dep_var, **kwargs):
+    iterationCtrl = IterationController(
+        rel_args = rel_args,
+        rel_state = rel_state,
+        stateType = "DOUBLE PRECISION[]",
+        truncAfterIteration = False,
+        schema_madlib = schema_madlib, # Identifiers start here
+        rel_source = rel_source,
+        col_ind_var = col_ind_var,
+        col_dep_var = col_dep_var)
+    with iterationCtrl as it:
+        it.iteration = 0
+        while True:
+            it.update("""
+                SELECT {schema_madlib}.linear_svm_igd_min_step(
+                    state_with_loss)
+                FROM (
+                    SELECT stepsize,
+                        {schema_madlib}.linear_svm_igd_step(
+                            (_src.{col_ind_var})::FLOAT8[],
+                            (_src.{col_dep_var})::BOOLEAN,
+                            state,
+                            (SELECT _args.dimension
+                                FROM {rel_args} AS _args),
+                            0.0::FLOAT8) AS state_with_loss
+                    FROM {rel_source} AS _src, (
+                        SELECT stepsize.value AS stepsize,
+                            {schema_madlib}.linear_svm_igd_step(
+                            (_src.{col_ind_var})::FLOAT8[],
+                            (_src.{col_dep_var})::BOOLEAN,
+                            (SELECT _state FROM {rel_state}
+                                WHERE _iteration = {iteration}),
+                            (SELECT _args.dimension
+                                FROM {rel_args} AS _args),
+                            stepsize.value) AS state
+                        FROM {rel_source} AS _src,
+                            (SELECT unnest(_args.stepsizes) AS value
+                                FROM {rel_args} AS _args) AS stepsize
+                        GROUP BY stepsize.value) AS gbstepsize
+                    GROUP BY stepsize) AS gbstatewrongloss
                 """)
             if it.test("""
                 {iteration} > _args.num_iterations OR

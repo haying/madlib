@@ -24,10 +24,16 @@ DECLARE_UDF(convex, linear_svm_igd_final)
  *     log-likelihood between two transition states
  */
 DECLARE_UDF(convex, internal_linear_svm_igd_distance)
+DECLARE_UDF(convex, internal_linear_svm_igd_result)
 
 /**
  * @brief Linear support vector machine (incremental gradient): Convert
  *     transition state to result tuple
  */
 DECLARE_UDF(convex, internal_linear_svm_igd_coef)
+
+DECLARE_UDF(convex, linear_svm_igd_bb_transition)
+DECLARE_UDF(convex, linear_svm_igd_bb_final)
+
+DECLARE_UDF(convex, linear_svm_igd_min_transition)
 
