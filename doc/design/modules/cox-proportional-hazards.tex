@@ -107,6 +107,38 @@ V_i & = V_{i+1} +  \frac{H_{i}H_{i}^T }{ S_{i}^2 } -  \frac{V_{i}}{ S_{i}}.
 \end{align}
 With this recurrence relationship, the hessian matrix and the gradient direction can be computed in linear time.
 
-
 %In addition to the computational expense of computing the Hessian, the inverse Hessian must be computed as well.  Unfortunately, matrix inversion is an expensive operation, and  cannot be parallelized.  
+
+
+% SECTION: Stratification Support 
+\section{Stratification Support}\label{cox:stratified}
+In actual use cases, the proportional hazard assumption may not be satisfied if we use all independent variables as covariates.
+A stratified Cox regression model may then be useful.
+It offers a way such that we can choose a subset of independent variables as covariates while are still taking the remaining independent variables into account.
+The stratified Cox regression is available in both R~\cite{r-cox} and Stata~\cite{stata-cox}.
+
+\subsection{Estimating A Stratified Cox Model}\label{cox:estimate-stratified}
+The parameter estimation is done by maximizing the product of likelihoods, each from a stratum.~\cite{stratified-ethz-slides}
+Given $n$ observations, each with $m$ covariates and each in one of $K$ strata,~\footnote{Note that this does not mean that we have $K$ variables other than the $m$ covariates, but $K$ groups classified by strata ID variables.}  let $\mathit{ST}_{k}$ denote the set of observations in the $k$-th stratum.
+Because, as an objective function, the sum of log-likelihoods is equivalent to the product of likelihoods, according to Equation \ref{cox:equ:LLH}, we have the log-likelihood associated with the $k$-th stratum,
+\[
+L_{k} = \sum_{i \in \mathit{ST}_{k}} \left[  \bold{\beta^T x_i} - \log\left(\sum_{j \in R_k(t_i)} e^{\bold{\beta^T x_j} } \right) \right],
+\]
+where $R_k(t_i)$ the set of observations in $\mathit{ST}_{k}$ and still alive at time $t_i$.
+Therefore, the objective function of stratified cox regression can be expressed as
+\begin{equation}\label{cox:equ:stratified-obj}
+L^{\mathit{stratified}} = \sum_{k=1}^{K} L_{k} = \sum_{k=1}^{K} \sum_{i \in \mathit{ST}_{k}} \left[  \bold{\beta^T x_i} - \log\left(\sum_{j \in R_k(t_i)} e^{\bold{\beta^T x_j} } \right) \right].
+\end{equation}
+The appropriate changes to gradient, Hessian and censoring are trivial.
+
+\subsection{When We Need A Stratified Cox Model?}\label{cox:diagnostic}
+General practice in standard statistical packages (i.e. R, SAS) is to make use of the Schoenfeld residuals to gauge whether or not the proportional hazards assumption has been violated.
+To this end, we need to investigate the implementation of R's \texttt{cox.zph()} function for MADlib.
+There are several parametric options available in the \texttt{cox.zph()} function, but we prioritize implementation of \texttt{cox.zph()} with its default parameter settings.
+The output of \texttt{cox.zph()} contains 3 numbers for each covariate, scaled Schoenfeld residual, chi-square, and p-value.
+The actual formulas of computing these are still to be investigated.
+
+
+
+
 
