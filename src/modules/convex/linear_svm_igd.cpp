@@ -65,13 +65,16 @@ linear_svm_igd_transition::run(AnyType &args) {
     // tuple
     using madlib::dbal::eigen_integration::MappedColumnVector;
     GLMTuple tuple;
-    tuple.indVar.rebind(args[1].getAs<MappedColumnVector>().memoryHandle());
+    tuple.indVar.rebind(args[1].getAs<MappedColumnVector>().memoryHandle(),
+            state.task.dimension);
     tuple.depVar = args[2].getAs<bool>() ? 1. : -1.;
 
     // Now do the transition step
     LinearSVMIGDAlgorithm::transition(state, tuple);
     LinearSVMLossAlgorithm::transition(state, tuple);
     state.algo.numRows ++;
+
+    // dberr << "incrModel: " << state.algo.incrModel << std::endl;
 
     return state;
 }

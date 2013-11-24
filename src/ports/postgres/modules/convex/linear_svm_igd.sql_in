@@ -54,7 +54,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.linear_svm_igd_step(
         /*+ stepsize */         DOUBLE PRECISION) (
     STYPE=DOUBLE PRECISION[],
     SFUNC=MADLIB_SCHEMA.linear_svm_igd_transition,
-    m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.linear_svm_igd_merge,')
+--    m4_ifdef(`GREENPLUM',`prefunc=MADLIB_SCHEMA.linear_svm_igd_merge,')
     FINALFUNC=MADLIB_SCHEMA.linear_svm_igd_final,
     INITCOND='{0,0,0,0,0}'
 );
